@@ -1,5 +1,3 @@
-pip install fastapi uvicorn websockets
-uvicorn server:app --reload
-# In 2 Terminals:
-python client.py
-python client.py
+cd backend
+pip install -r requirements.txt
+uvicorn server:app --reload --port 8000
