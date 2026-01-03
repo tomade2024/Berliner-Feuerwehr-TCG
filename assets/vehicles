@@ -1,0 +1,14 @@
+| Ingame-Code | Kartenname    | Dateiname                        |
+| ----------- | ------------- | -------------------------------- |
+| V100        | LHF           | `assets/cards/vehicles/V100.png` |
+| V101        | TLF           | `assets/cards/vehicles/V101.png` |
+| V102        | DLK 23/12     | `assets/cards/vehicles/V102.png` |
+| V103        | SW            | `assets/cards/vehicles/V103.png` |
+| V104        | Feuerwehrkran | `assets/cards/vehicles/V104.png` |
+| V105        | ELW 1         | `assets/cards/vehicles/V105.png` |
+| V106        | ELW 2         | `assets/cards/vehicles/V106.png` |
+| V108        | RTW           | `assets/cards/vehicles/V108.png` |
+| V109        | NEF           | `assets/cards/vehicles/V109.png` |
+| V110        | ITW           | `assets/cards/vehicles/V110.png` |
+| V111        | RTH           | `assets/cards/vehicles/V111.png` |
+| V112        | ITH           | `assets/cards/vehicles/V112.png` |
