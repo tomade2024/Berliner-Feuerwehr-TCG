@@ -1,0 +1,19 @@
+| Ingame-Code | Kartenname      | Dateiname                         |
+| ----------- | --------------- | --------------------------------- |
+| E001        | Großbrand       | `assets/cards/incidents/E001.png` |
+| E002        | Wohnungsbrand   | `assets/cards/incidents/E002.png` |
+| E003        | Verkehrsunfall  | `assets/cards/incidents/E003.png` |
+| E004        | Reanimation     | `assets/cards/incidents/E004.png` |
+| E005        | Gefahrgutunfall | `assets/cards/incidents/E005.png` |
+| E006        | Industriebrand  | `assets/cards/incidents/E006.png` |
+| E007        | Personensuche   | `assets/cards/incidents/E007.png` |
+
+| Ingame-Code | Kartenname     | Dateiname                         |
+| ----------- | -------------- | --------------------------------- |
+| R001        | Leitstelle     | `assets/cards/incidents/R001.png` |
+| R002        | Lagezentrum    | `assets/cards/incidents/R002.png` |
+| R003        | Verkehrsstau   | `assets/cards/incidents/R003.png` |
+| R004        | Hitze          | `assets/cards/incidents/R004.png` |
+| R005        | Blitzschlag    | `assets/cards/incidents/R005.png` |
+| R006        | Unwetter       | `assets/cards/incidents/R006.png` |
+| R007        | Schwerlastlage | `assets/cards/incidents/R007.png` |
