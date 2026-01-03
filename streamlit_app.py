@@ -1,151 +1,279 @@
-import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+from __future__ import annotations
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+import asyncio
+import json
+import secrets
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+app = FastAPI()
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+# -----------------------------
+# Data model (MVP)
+# -----------------------------
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+@dataclass
+class VehicleCard:
+    id: str
+    name: str
+    cost_ep: int
+    crew: int
+    brand: int = 0
+    technik: int = 0
+    hoehe: int = 0
+    gefahrgut: int = 0
+    text: str = ""
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+@dataclass
+class PlayerState:
+    pid: str
+    name: str
+    ep: int = 6
+    crew: int = 5
+    hand: List[VehicleCard] = field(default_factory=list)
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+@dataclass
+class RoomState:
+    room_code: str
+    players: Dict[str, PlayerState] = field(default_factory=dict)
+    sockets: Dict[str, WebSocket] = field(default_factory=dict)
+    turn_order: List[str] = field(default_factory=list)
+    active_idx: int = 0
+    round_no: int = 1
+    started: bool = False
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+    # very small prototype deck pool
+    deck: List[VehicleCard] = field(default_factory=list)
+    discard: List[VehicleCard] = field(default_factory=list)
 
-    return gdp_df
+    def active_pid(self) -> Optional[str]:
+        if not self.turn_order:
+            return None
+        return self.turn_order[self.active_idx % len(self.turn_order)]
 
-gdp_df = get_gdp_data()
+rooms: Dict[str, RoomState] = {}
+rooms_lock = asyncio.Lock()
 
-# -----------------------------------------------------------------------------
-# Draw the actual page
+def sample_deck() -> List[VehicleCard]:
+    # MVP: 10 cards from our earlier reference set (duplicates can be added later)
+    cards = [
+        VehicleCard("V001", "HLF 20", 4, 1, brand=4, technik=3, text="+1 Technik bei Verkehrsunfall"),
+        VehicleCard("V002", "LF 20", 3, 1, brand=4, technik=1, text="+1 Brand wenn weiteres Löschfahrzeug beteiligt"),
+        VehicleCard("V003", "DLK 23/12", 3, 1, hoehe=4, brand=1, text="Pflicht bei Hochhausbrand (später in Regel)"),
+        VehicleCard("V004", "RW", 4, 1, technik=5, text="Zählt doppelt bei eingeklemmter Person (später)"),
+        VehicleCard("V005", "ELW 1", 2, 1, text="1x pro Einsatz: -1 EP Kosten (später)"),
+        VehicleCard("V006", "GW-Gefahrgut", 4, 1, gefahrgut=5, text="Verhindert Eskalation bei Gefahrgut (später)"),
+        VehicleCard("V007", "TM 50", 4, 1, hoehe=5, text="Kann DLK ersetzen (später)"),
+        VehicleCard("V008", "GW-Atemschutz", 3, 1, brand=0, text="Support: verhindert Personalverlust (später)"),
+        VehicleCard("V009", "Feuerwehrkran", 5, 1, technik=6, text="Pflicht bei Bauunfall (später)"),
+        VehicleCard("V010", "WLF", 3, 1, text="Aktivierung +1 EP: kopiert Rolle eines GW (später)"),
+    ]
+    # For MVP add some duplicates so drawing works
+    return cards * 3
 
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
+def to_public_state(room: RoomState) -> dict:
+    # send only what each client should generally know; hand is private -> we send per-client
+    return {
+        "room_code": room.room_code,
+        "started": room.started,
+        "round_no": room.round_no,
+        "active_pid": room.active_pid(),
+        "players": [
+            {"pid": p.pid, "name": p.name, "ep": p.ep, "crew": p.crew, "hand_size": len(p.hand)}
+            for p in room.players.values()
+        ],
+    }
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
+async def send(ws: WebSocket, msg: dict) -> None:
+    await ws.send_text(json.dumps(msg, ensure_ascii=False))
 
-# Add some spacing
-''
-''
+async def broadcast(room: RoomState, msg: dict) -> None:
+    for ws in list(room.sockets.values()):
+        await send(ws, msg)
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+def draw(room: RoomState) -> VehicleCard:
+    if not room.deck:
+        # reshuffle discard for MVP
+        room.deck = room.discard
+        room.discard = []
+    # simple pop
+    return room.deck.pop()
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+async def sync_room(room: RoomState) -> None:
+    await broadcast(room, {"type": "room_state", "state": to_public_state(room)})
 
-countries = gdp_df['Country Code'].unique()
+async def sync_private(room: RoomState, pid: str) -> None:
+    ws = room.sockets.get(pid)
+    if not ws:
+        return
+    player = room.players[pid]
+    await send(ws, {
+        "type": "private_state",
+        "hand": [card.__dict__ for card in player.hand],
+        "you": {"pid": player.pid, "name": player.name, "ep": player.ep, "crew": player.crew},
+    })
 
-if not len(countries):
-    st.warning("Select at least one country")
+# -----------------------------
+# Game actions (MVP)
+# -----------------------------
 
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
+def start_game(room: RoomState) -> None:
+    room.started = True
+    room.turn_order = list(room.players.keys())
+    room.active_idx = 0
+    room.round_no = 1
 
-''
-''
-''
+    # build deck and "shuffle"
+    room.deck = sample_deck()
+    secrets.SystemRandom().shuffle(room.deck)
 
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
+    # deal 5 vehicle cards each (MVP uses vehicle deck only)
+    for p in room.players.values():
+        p.ep = 6
+        p.crew = 5
+        p.hand = [draw(room) for _ in range(5)]
 
-st.header('GDP over time', divider='gray')
+def resources_phase(player: PlayerState) -> None:
+    # v1.1: +2 EP (cap 10), +1 crew (cap 7)
+    player.ep = min(10, player.ep + 2)
+    player.crew = min(7, player.crew + 1)
 
-''
+# -----------------------------
+# WebSocket endpoint
+# -----------------------------
 
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
+@app.websocket("/ws/{room_code}/{player_name}")
+async def ws_endpoint(ws: WebSocket, room_code: str, player_name: str):
+    await ws.accept()
+    pid = secrets.token_hex(4)
 
-''
-''
+    async with rooms_lock:
+        room = rooms.get(room_code)
+        if room is None:
+            room = RoomState(room_code=room_code)
+            rooms[room_code] = room
 
+        # limit for MVP: 2 players
+        if len(room.players) >= 2:
+            await send(ws, {"type": "error", "message": "Room ist voll (MVP: max 2 Spieler)."})
+            await ws.close()
+            return
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+        room.players[pid] = PlayerState(pid=pid, name=player_name)
+        room.sockets[pid] = ws
 
-st.header(f'GDP in {to_year}', divider='gray')
+    await send(ws, {"type": "welcome", "pid": pid, "room_code": room_code})
+    await sync_room(room)
+    await sync_private(room, pid)
 
-''
+    try:
+        while True:
+            raw = await ws.receive_text()
+            msg = json.loads(raw)
+            mtype = msg.get("type")
 
-cols = st.columns(4)
+            # Basic validation
+            if pid not in room.players:
+                await send(ws, {"type": "error", "message": "Unbekannter Spieler."})
+                continue
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+            player = room.players[pid]
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+            # Hostless start: first player can start once 2 players present
+            if mtype == "start":
+                if room.started:
+                    await send(ws, {"type": "error", "message": "Spiel läuft bereits."})
+                    continue
+                if len(room.players) < 2:
+                    await send(ws, {"type": "error", "message": "Warte auf zweiten Spieler."})
+                    continue
+                start_game(room)
+                await broadcast(room, {"type": "info", "message": "Spiel gestartet."})
+                await sync_room(room)
+                for p in room.players.keys():
+                    await sync_private(room, p)
+                continue
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+            # Turn check for action types
+            if mtype in {"end_turn", "play_vehicle", "draw"}:
+                if not room.started:
+                    await send(ws, {"type": "error", "message": "Spiel ist noch nicht gestartet."})
+                    continue
+                if room.active_pid() != pid:
+                    await send(ws, {"type": "error", "message": "Nicht Ihr Zug."})
+                    continue
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+            if mtype == "draw":
+                # MVP: draw 1 vehicle card
+                player.hand.append(draw(room))
+                await send(ws, {"type": "info", "message": "1 Karte gezogen."})
+                await sync_private(room, pid)
+                continue
+
+            if mtype == "play_vehicle":
+                card_id = msg.get("card_id")
+                if not card_id:
+                    await send(ws, {"type": "error", "message": "card_id fehlt."})
+                    continue
+
+                idx = next((i for i, c in enumerate(player.hand) if c.id == card_id), None)
+                if idx is None:
+                    await send(ws, {"type": "error", "message": "Karte nicht auf der Hand."})
+                    continue
+
+                card = player.hand[idx]
+                if player.ep < card.cost_ep:
+                    await send(ws, {"type": "error", "message": "Nicht genug EP."})
+                    continue
+                if player.crew < card.crew:
+                    await send(ws, {"type": "error", "message": "Nicht genug Personal."})
+                    continue
+
+                # MVP: playing a vehicle just spends resources and discards the card
+                player.ep -= card.cost_ep
+                player.crew -= card.crew
+                played = player.hand.pop(idx)
+                room.discard.append(played)
+
+                await broadcast(room, {
+                    "type": "info",
+                    "message": f"{player.name} spielt {played.name} (MVP: Ressourcenverbrauch)."
+                })
+                await sync_room(room)
+                for p in room.players.keys():
+                    await sync_private(room, p)
+                continue
+
+            if mtype == "end_turn":
+                # advance turn, run resources phase for next active player
+                room.active_idx = (room.active_idx + 1) % len(room.turn_order)
+                # new round if looped
+                if room.active_idx == 0:
+                    room.round_no += 1
+
+                next_pid = room.active_pid()
+                if next_pid:
+                    resources_phase(room.players[next_pid])
+
+                await broadcast(room, {"type": "info", "message": "Zug beendet."})
+                await sync_room(room)
+                for p in room.players.keys():
+                    await sync_private(room, p)
+                continue
+
+            await send(ws, {"type": "error", "message": f"Unbekannter Nachrichtentyp: {mtype}"})
+
+    except WebSocketDisconnect:
+        async with rooms_lock:
+            if room_code in rooms:
+                room = rooms[room_code]
+                room.players.pop(pid, None)
+                room.sockets.pop(pid, None)
+                # cleanup
+                if not room.players:
+                    rooms.pop(room_code, None)
+    except Exception as e:
+        await send(ws, {"type": "error", "message": f"Serverfehler: {e}"})
+        await ws.close()
