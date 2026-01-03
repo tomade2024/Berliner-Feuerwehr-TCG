@@ -1,10 +1,26 @@
+import os
 import requests
 import streamlit as st
 
-API_BASE = st.secrets.get("API_BASE", "http://127.0.0.1:8000")
+API_BASE = st.secrets.get("API_BASE", os.environ.get("API_BASE", "http://127.0.0.1:8000"))
 
-st.set_page_config(page_title="Berliner Feuerwehr TCG", layout="wide")
-st.title("Berliner Feuerwehr TCG – Online (Deckbuilding + Räume + Booster)")
+def backend_healthcheck():
+    try:
+        r = requests.get(f"{API_BASE}/catalog/vehicles", timeout=3)
+        return (r.status_code < 500), f"HTTP {r.status_code}"
+    except Exception as e:
+        return False, str(e)
+
+ok, info = backend_healthcheck()
+
+with st.sidebar:
+    st.caption("Backend Status")
+    st.write(f"API_BASE: {API_BASE}")
+    if ok:
+        st.success(f"Backend erreichbar ({info})")
+    else:
+        st.error(f"Backend NICHT erreichbar: {info}")
+        st.stop()
 
 # -------------------------
 # Helpers
