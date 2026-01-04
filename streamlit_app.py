@@ -182,7 +182,55 @@ if not st.session_state.user:
 
 uid = st.session_state.user["id"]
 
-tabs = st.tabs(["Sammlung","Booster","Deck","Einsatz"])
+tabs = st.tabs(["Start","Sammlung","Booster","Deck","Einsatz"])
+# =========================================================
+# STARTSEITE
+# =========================================================
+
+with tabs[0]:
+    st.title("🚒 Berliner Feuerwehr TCG")
+
+    st.markdown("""
+    **Berliner Feuerwehr TCG** ist ein digitales Sammelkartenspiel,
+    in dem Sie mit realistischen Fahrzeugen der Berliner Feuerwehr
+    Einsätze bewältigen und im Duell gegen andere Spieler antreten.
+    """)
+
+    st.divider()
+
+    st.markdown("### 🚒 Worum geht es?")
+    st.write("""
+    Sie übernehmen die Rolle einer Einsatzleitung.
+    Mit Feuerwehr-, Rettungsdienst- und Spezialfahrzeugen reagieren Sie
+    auf dynamische Einsatzlagen wie Brände, Verkehrsunfälle oder medizinische Notfälle.
+    """)
+
+    st.markdown("### 🃏 Kartentypen")
+    st.write("""
+    **Fahrzeugkarten** – Ihre Einheiten mit Werten, Kosten und Schwächen  
+    **Einsatzkarten** – Aktive Einsatzlagen mit Anforderungen  
+    **Ereigniskarten** – Unerwartete Effekte auf das Spiel
+    """)
+
+    st.markdown("### 📦 Decks & Booster")
+    st.write("""
+    Sammeln Sie Karten über Booster und bauen Sie daraus ein Deck mit 40 Karten.
+    Ein gutes Deck kombiniert günstige Basisfahrzeuge mit starken Spezialisten.
+    """)
+
+    st.markdown("### ⚔️ Duellmodus")
+    st.write("""
+    Zwei Spieler treten gegeneinander an.
+    Wer Einsätze effizienter löst, sammelt mehr Einsatzwert (EW) und gewinnt das Duell.
+    """)
+
+    st.markdown("### ▶️ So starten Sie")
+    st.write("""
+    1. Einloggen oder registrieren  
+    2. Booster öffnen  
+    3. Deck bauen  
+    4. Einsätze spielen
+    """)
 
 # =========================================================
 # SAMMLUNG
